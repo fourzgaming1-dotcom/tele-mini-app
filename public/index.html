@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Wallet</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: var(--tg-theme-bg-color, #0f1115);
+    --secondary-bg: var(--tg-theme-secondary-bg-color, #171a21);
+    --text: var(--tg-theme-text-color, #f3f4f6);
+    --hint: var(--tg-theme-hint-color, #8b90a0);
+    --link: var(--tg-theme-link-color, #6ab7ff);
+    --button: var(--tg-theme-button-color, #3ea6ff);
+    --button-text: var(--tg-theme-button-text-color, #05131f);
+    --accent: #ffb020;
+    --danger: #ff5c5c;
+    --radius: 16px;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    height: 100%;
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .wrap { max-width: 480px; margin: 0 auto; padding: 20px 16px 32px; }
+
+  .balance-card {
+    background: linear-gradient(135deg, #1c2130, #12141b);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: var(--radius);
+    padding: 24px 20px;
+    text-align: left;
+  }
+  .balance-label { color: var(--hint); font-size: 13px; margin: 0 0 6px; }
+  .balance-amount { font-size: 40px; font-weight: 700; letter-spacing: -0.02em; margin: 0; }
+  .balance-amount span { font-size: 20px; color: var(--hint); font-weight: 500; }
+
+  .deposit-row { display: flex; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
+  .chip {
+    flex: 1 1 auto;
+    min-width: 64px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: var(--text);
+    border-radius: 12px;
+    padding: 10px 0;
+    text-align: center;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .chip:active { transform: scale(0.97); }
+
+  .btn-primary {
+    width: 100%;
+    margin-top: 14px;
+    background: var(--button);
+    color: var(--button-text);
+    border: none;
+    border-radius: 12px;
+    padding: 14px 0;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .btn-primary:disabled { opacity: 0.5; }
+
+  .custom-row { display: flex; gap: 8px; margin-top: 10px; }
+  .custom-row input {
+    flex: 1;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: var(--text);
+    border-radius: 12px;
+    padding: 10px 12px;
+    font-size: 15px;
+  }
+
+  h2.section-title { font-size: 15px; color: var(--hint); font-weight: 600; margin: 28px 0 10px; }
+
+  .item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--secondary-bg);
+    border-radius: var(--radius);
+    padding: 14px;
+    margin-bottom: 10px;
+  }
+  .item-emoji { font-size: 28px; width: 40px; text-align: center; }
+  .item-info { flex: 1; min-width: 0; }
+  .item-name { font-weight: 600; font-size: 15px; margin: 0 0 2px; }
+  .item-desc { color: var(--hint); font-size: 13px; margin: 0; }
+  .item-buy {
+    background: rgba(62,166,255,0.15);
+    color: var(--link);
+    border: none;
+    border-radius: 10px;
+    padding: 8px 12px;
+    font-weight: 700;
+    font-size: 14px;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .item-buy:disabled { opacity: 0.4; }
+
+  .tx { display: flex; justify-content: space-between; font-size: 14px; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
+  .tx:last-child { border-bottom: none; }
+  .tx-desc { color: var(--hint); }
+  .tx-amt.pos { color: #4ade80; }
+  .tx-amt.neg { color: var(--danger); }
+
+  .toast {
+    position: fixed;
+    left: 50%; bottom: 24px;
+    transform: translateX(-50%);
+    background: #1c2130;
+    border: 1px solid rgba(255,255,255,0.1);
+    color: var(--text);
+    padding: 10px 16px;
+    border-radius: 12px;
+    font-size: 14px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+  .toast.show { opacity: 1; }
+
+  .skeleton { color: var(--hint); font-size: 14px; padding: 20px 0; text-align: center; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="balance-card">
+      <p class="balance-label">Wallet balance</p>
+      <p class="balance-amount" id="balance">--<span id="currency-label"></span></p>
+
+      <div class="deposit-row" id="preset-row"></div>
+      <div class="custom-row">
+        <input id="custom-amount" type="number" min="1" step="1" placeholder="Custom amount" />
+      </div>
+      <button class="btn-primary" id="deposit-btn">Add funds</button>
+    </div>
+
+    <h2 class="section-title">Store</h2>
+    <div id="items-list" class="skeleton">Loading store…</div>
+
+    <h2 class="section-title">Recent activity</h2>
+    <div id="tx-list" class="skeleton">Loading activity…</div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const tg = window.Telegram?.WebApp;
+    tg?.ready();
+    tg?.expand();
+
+    const initData = tg?.initData || "";
+    let selectedPreset = null;
+    let currentCurrency = "usd";
+
+    function money(cents, currency) {
+      return (cents / 100).toLocaleString(undefined, {
+        style: "currency",
+        currency: (currency || "usd").toUpperCase(),
+      });
+    }
+
+    function showToast(msg) {
+      const el = document.getElementById("toast");
+      el.textContent = msg;
+      el.classList.add("show");
+      setTimeout(() => el.classList.remove("show"), 2200);
+    }
+
+    async function api(path, options = {}) {
+      const res = await fetch(path, {
+        ...options,
+        headers: {
+          "Content-Type": "application/json",
+          "X-Telegram-Init-Data": initData,
+          ...(options.headers || {}),
+        },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Request failed");
+      return data;
+    }
+
+    function renderPresets(presets) {
+      const row = document.getElementById("preset-row");
+      row.innerHTML = "";
+      presets.forEach((amount) => {
+        const chip = document.createElement("div");
+        chip.className = "chip";
+        chip.textContent = `$${amount}`;
+        chip.onclick = () => {
+          selectedPreset = amount;
+          document.getElementById("custom-amount").value = "";
+          [...row.children].forEach((c) => (c.style.outline = ""));
+          chip.style.outline = "2px solid var(--link)";
+        };
+        row.appendChild(chip);
+      });
+    }
+
+    function renderItems(items, balanceCents) {
+      const list = document.getElementById("items-list");
+      list.className = "";
+      list.innerHTML = "";
+      items.forEach((item) => {
+        const row = document.createElement("div");
+        row.className = "item";
+        const canAfford = balanceCents >= item.price_cents;
+        row.innerHTML = `
+          <div class="item-emoji">${item.emoji || "🛍️"}</div>
+          <div class="item-info">
+            <p class="item-name">${item.name}</p>
+            <p class="item-desc">${item.description || ""}</p>
+          </div>
+          <button class="item-buy" ${canAfford ? "" : "disabled"}>${money(item.price_cents, currentCurrency)}</button>
+        `;
+        row.querySelector("button").onclick = () => buyItem(item.id);
+        list.appendChild(row);
+      });
+    }
+
+    function renderTransactions(txs) {
+      const list = document.getElementById("tx-list");
+      list.className = "";
+      if (!txs.length) {
+        list.innerHTML = `<p style="color:var(--hint); font-size:14px;">No activity yet.</p>`;
+        return;
+      }
+      list.innerHTML = "";
+      txs.forEach((tx) => {
+        const row = document.createElement("div");
+        row.className = "tx";
+        const positive = tx.amount_cents >= 0;
+        row.innerHTML = `
+          <span class="tx-desc">${tx.description || tx.type}</span>
+          <span class="tx-amt ${positive ? "pos" : "neg"}">${positive ? "+" : ""}${money(tx.amount_cents, currentCurrency)}</span>
+        `;
+        list.appendChild(row);
+      });
+    }
+
+    async function loadWallet() {
+      const me = await api("/api/me");
+      currentCurrency = me.currency;
+      document.getElementById("balance").innerHTML =
+        money(me.balance_cents, me.currency).replace(/^(\D*)/, "$1");
+      renderPresets(me.deposit_presets);
+      renderTransactions(me.transactions);
+      return me;
+    }
+
+    async function loadItems(balanceCents) {
+      const { items } = await api("/api/items");
+      renderItems(items, balanceCents);
+    }
+
+    async function refreshAll() {
+      const me = await loadWallet();
+      await loadItems(me.balance_cents);
+    }
+
+    document.getElementById("deposit-btn").onclick = async () => {
+      const custom = Number(document.getElementById("custom-amount").value);
+      const amount = custom > 0 ? custom : selectedPreset;
+      if (!amount) {
+        showToast("Choose or enter an amount first");
+        return;
+      }
+      const btn = document.getElementById("deposit-btn");
+      btn.disabled = true;
+      btn.textContent = "Starting checkout…";
+      try {
+        const { url } = await api("/api/deposit", {
+          method: "POST",
+          body: JSON.stringify({ amount_usd: amount }),
+        });
+        tg?.openLink(url, { try_instant_view: false }) ?? window.open(url, "_blank");
+      } catch (e) {
+        showToast(e.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Add funds";
+      }
+    };
+
+    async function buyItem(itemId) {
+      try {
+        const result = await api("/api/spend", {
+          method: "POST",
+          body: JSON.stringify({ item_id: itemId }),
+        });
+        showToast(`Purchased ${result.item.name}`);
+        document.getElementById("balance").innerHTML = money(result.balance_cents, currentCurrency);
+        await loadItems(result.balance_cents);
+      } catch (e) {
+        showToast(e.message);
+      }
+    }
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") refreshAll();
+    });
+
+    refreshAll().catch((e) => showToast(e.message));
+  </script>
+</body>
+</html>
